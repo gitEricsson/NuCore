@@ -60,14 +60,40 @@ def compare_outputs(generated_file, expected_file):
         print(f"  ✓ All mandatory columns present")
     
     # Show sample comparison
-    print(f"\n  Sample row comparison:")
-    print(f"    Generated row 1: {df_gen.iloc[0].to_dict() if len(df_gen) > 0 else 'No data'}")
-    print(f"    Expected row 1:  {df_exp.iloc[0].to_dict() if len(df_exp) > 0 else 'No data'}")
+    print(f"\n  Sample row 1 comparison:")
+    gen_row = df_gen.iloc[0].to_dict() if len(df_gen) > 0 else "No data"
+    exp_row = df_exp.iloc[0].to_dict() if len(df_exp) > 0 else "No data"
+    print(f"    Generated: {gen_row}")
+    print(f"    Expected:  {exp_row}")
+    
+    # Value level matches (Exclude optional/null generated fields in the base files)
+    total_cells = 0
+    matched_cells = 0
+    
+    for row_idx in range(min(len(df_gen), len(df_exp))):
+        for col in mandatory:
+            if col in df_gen.columns and col in df_exp.columns:
+                gen_val = df_gen.iloc[row_idx][col]
+                exp_val = df_exp.iloc[row_idx][col]
+                
+                # Check NaNs mapping
+                if pd.isna(gen_val) and pd.isna(exp_val):
+                    matched_cells += 1
+                elif str(gen_val).strip() == str(exp_val).strip():
+                    matched_cells += 1
+                elif isinstance(gen_val, (int, float)) and isinstance(exp_val, (int, float)) and pd.notna(gen_val) and pd.notna(exp_val):
+                   if abs(float(gen_val) - float(exp_val)) < 0.1:
+                       matched_cells += 1
+                total_cells += 1
+                
+    cell_match_rate = (matched_cells / total_cells * 100) if total_cells > 0 else 0
+    print(f"  ✓ Value Match Rate (Mandatory Fields): {cell_match_rate:.2f}% ({matched_cells}/{total_cells})")
     
     return {
         'columns_match': not missing_cols and not extra_cols,
         'has_mandatory': not missing_mandatory,
-        'row_count_match': df_gen.shape[0] == df_exp.shape[0]
+        'row_count_match': df_gen.shape[0] == df_exp.shape[0],
+        'value_match_rate': cell_match_rate
     }
 
 
@@ -160,6 +186,14 @@ def main():
             print(f"    Columns match: {details['columns_match']}")
             print(f"    Has mandatory: {details['has_mandatory']}")
             print(f"    Row count match: {details['row_count_match']}")
+            print(f"    Value Match Rate: {details.get('value_match_rate', 0.0):.2f}%")
+            
+    # Calculate overall accuracy
+    overall_match = sum(r['details'].get('value_match_rate', 0.0) for r in results if 'details' in r)
+    total_valid_tests = sum(1 for r in results if 'details' in r)
+    
+    if total_valid_tests > 0:
+        print(f"\n★ OVERALL ACCURACY (Value Match Rate): {(overall_match / total_valid_tests):.2f}%")
     
     print(f"\nTest outputs saved to: {test_output_dir}")
 

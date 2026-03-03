@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 import re
+import difflib
 from datetime import datetime
 import anthropic
 from dotenv import load_dotenv
@@ -85,11 +86,16 @@ class RiskRegisterStandardizer:
         
         return pd.DataFrame(all_rows)
 
-    def identify_columns_with_llm(self, df: pd.DataFrame, sample_rows: int = 5) -> Dict[str, str]:
+    def identify_columns_with_llm(self, df: pd.DataFrame, sample_size: int = 10) -> Dict[str, str]:
         """Use Claude API to identify column mappings."""
+        # Smart Row Sampling: Find the rows with the most non-null values
+        # This skips over title/metadata rows at the top of Excel files
+        row_non_null_counts = df.notna().sum(axis=1)
+        densest_rows_idx = row_non_null_counts.nlargest(sample_size).index.sort_values()
+        
         sample_data = {
             'columns': list(df.columns),
-            'sample_rows': df.head(sample_rows).to_dict('records'),
+            'sample_rows': df.loc[densest_rows_idx].replace({pd.NA: None}).to_dict('records'),
             'shape': df.shape
         }
         
@@ -170,10 +176,21 @@ OUTPUT JSON (no explanation):
             'Impact_Post', 'Risk_Priority_Post'
         ]
         
+        actual_cols = list(df.columns)
+        
         for std_field in standard_fields:
-            actual_col = column_mapping.get(std_field)
-            if actual_col and actual_col in df.columns:
-                standardized_data[std_field] = df[actual_col]
+            mapped_col = column_mapping.get(std_field)
+            
+            if mapped_col:
+                # Fuzzy Column Matching: In case the LLM hallucinates slight column name alterations
+                close_matches = difflib.get_close_matches(mapped_col, actual_cols, n=1, cutoff=0.8)
+                if mapped_col in actual_cols:
+                    standardized_data[std_field] = df[mapped_col]
+                elif close_matches:
+                    print(f"  Fuzzy match applied: mapped '{mapped_col}' -> found '{close_matches[0]}'")
+                    standardized_data[std_field] = df[close_matches[0]]
+                else:
+                    standardized_data[std_field] = None
             else:
                 standardized_data[std_field] = None
         
@@ -222,10 +239,31 @@ OUTPUT JSON (no explanation):
 
     @staticmethod
     def normalize_score(series: pd.Series, scale: str) -> pd.Series:
-        """Normalize scores to 1-10 scale."""
+        """Normalize scores to 1-10 scale safely parsing text values."""
         if series is None:
             return None
+            
+        def extract_number(val):
+            if pd.isna(val):
+                return pd.NA
+            
+            # If it's already a number
+            if isinstance(val, (int, float)):
+                return val
+                
+            # If it's a string, try to find the first integer. e.g "3 - High Risk" -> 3
+            val_str = str(val).strip()
+            match = re.search(r'\b(\d+)\b', val_str)
+            if match:
+                return float(match.group(1))
+            
+            # Fallback if no digit found
+            return pd.NA
+            
+        # Apply intelligent extraction
+        series = series.apply(extract_number)
         
+        # Coerce to numeric (safely handles pd.NA now)
         series = pd.to_numeric(series, errors='coerce')
         
         if scale == '1-5':
@@ -233,8 +271,8 @@ OUTPUT JSON (no explanation):
         elif scale == '1-10':
             return series
         else:
-            max_val = series.max()
-            if max_val <= 5:
+            max_val = series.dropna().max() if not series.dropna().empty else 10
+            if pd.notna(max_val) and max_val <= 5:
                 return series * 2
             return series
 

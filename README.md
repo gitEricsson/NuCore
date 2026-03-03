@@ -41,7 +41,12 @@ pip install -r requirements.txt
 
 ```bash
 # Create input and output directories
+```bash
+# Mac/Linux
 mkdir -p input output
+# Windows
+mkdir input output
+```
 
 # Place input files in the input/ directory
 cp your_risk_register.xlsx input/
