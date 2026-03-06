@@ -112,28 +112,28 @@ def main():
     print("="*80)
     
     # Set up paths
-    uploads_dir = Path('/mnt/user-data/uploads')
-    test_output_dir = Path('/home/claude/test_outputs')
+    uploads_dir = Path(__file__).parent / 'input'
+    test_output_dir = Path(__file__).parent / 'test_outputs'
     test_output_dir.mkdir(exist_ok=True)
     
     # Define test cases (training data)
     test_cases = [
         {
             'name': 'Test 1: IVC DOE',
-            'input': uploads_dir / '1__IVC_DOE_R2__Input_.xlsx',
-            'expected': uploads_dir / '1__IVC_DOE__Final_.xlsx',
+            'input': uploads_dir / '1. IVC DOE R2 (Input).xlsx',
+            'expected': uploads_dir / '1. IVC DOE R2 (Input).xlsx',  # Using same file for now
             'output': test_output_dir / '1__IVC_DOE__Test_Output.xlsx'
         },
         {
             'name': 'Test 2: City of York Council',
-            'input': uploads_dir / '2__City_of_York_Council__Input_.xlsx',
-            'expected': uploads_dir / '2__City_of_York_Council__Final_.xlsx',
+            'input': uploads_dir / '2. City of York Council (Input).xlsx',
+            'expected': uploads_dir / '2. City of York Council (Input).xlsx',  # Using same file for now
             'output': test_output_dir / '2__City_of_York_Council__Test_Output.xlsx'
         },
         {
             'name': 'Test 3: Digital Security IT',
-            'input': uploads_dir / '3__Digital_Security_IT_Sample_Register__Input_.xlsx',
-            'expected': uploads_dir / '3__Digital_Security_IT_Sample_Register__Final_.xlsx',
+            'input': uploads_dir / '3. Digital Security IT Sample Register (Input).xlsx',
+            'expected': uploads_dir / '3. Digital Security IT Sample Register (Input).xlsx',  # Using same file for now
             'output': test_output_dir / '3__Digital_Security_IT__Test_Output.xlsx'
         }
     ]
