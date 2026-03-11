@@ -176,19 +176,36 @@ OUTPUT JSON (no explanation):
             'Impact_Post', 'Risk_Priority_Post'
         ]
         
-        actual_cols = list(df.columns)
+        actual_cols = [str(col) for col in df.columns]
         
         for std_field in standard_fields:
             mapped_col = column_mapping.get(std_field)
             
             if mapped_col:
+                # Convert mapped_col to string if it's an integer column index
+                mapped_col_str = str(mapped_col) if isinstance(mapped_col, (int, float)) else mapped_col
+                
                 # Fuzzy Column Matching: In case the LLM hallucinates slight column name alterations
-                close_matches = difflib.get_close_matches(mapped_col, actual_cols, n=1, cutoff=0.8)
-                if mapped_col in actual_cols:
-                    standardized_data[std_field] = df[mapped_col]
+                close_matches = difflib.get_close_matches(mapped_col_str, actual_cols, n=1, cutoff=0.8)
+                if mapped_col_str in actual_cols:
+                    # Find the original column name to access DataFrame
+                    original_col = None
+                    for col in df.columns:
+                        if str(col) == mapped_col_str:
+                            original_col = col
+                            break
+                    if original_col is not None:
+                        standardized_data[std_field] = df[original_col]
                 elif close_matches:
                     print(f"  Fuzzy match applied: mapped '{mapped_col}' -> found '{close_matches[0]}'")
-                    standardized_data[std_field] = df[close_matches[0]]
+                    # Find the original column name for the fuzzy match
+                    original_col = None
+                    for col in df.columns:
+                        if str(col) == close_matches[0]:
+                            original_col = col
+                            break
+                    if original_col is not None:
+                        standardized_data[std_field] = df[original_col]
                 else:
                     standardized_data[std_field] = None
             else:
