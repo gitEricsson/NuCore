@@ -18,19 +18,31 @@ import difflib
 from datetime import datetime
 import anthropic
 from dotenv import load_dotenv
+import google.generativeai as genai
 
 # Load environment variables from .env file
 load_dotenv()
 
 class RiskRegisterStandardizer:
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, use_gemini: bool = False):
         """Initialize the standardizer with Anthropic API key."""
         self.api_key = api_key or os.getenv('ANTHROPIC_API_KEY')
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY must be set in environment or passed to initialization")
-        
-        self.client = anthropic.Anthropic(api_key=self.api_key)
-        self.model = "claude-sonnet-4-20250514"
+        self.google_key = os.getenv('GOOGLE_API_KEY')
+        self.use_gemini = use_gemini
+
+        if self.use_gemini:
+            if not self.google_key:
+                raise ValueError("GOOGLE_API_KEY must be set to use Gemini")
+            genai.configure(api_key=self.google_key)
+            self.gemini_model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+
+
+        else:
+            if not self.api_key:
+                raise ValueError("ANTHROPIC_API_KEY must be set in environment or passed to initialization")
+            
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+            self.model = "claude-sonnet-4-20250514"
 
     def load_risk_register(self, file_path: str) -> Tuple[Optional[pd.DataFrame], str]:
         """Load risk register from various formats (Excel, PDF)."""
@@ -142,13 +154,25 @@ OUTPUT JSON (no explanation):
   "notes": "observations"
 }}"""
 
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        response_text = message.content[0].text
+        if self.use_gemini:
+            # Gemini Call
+            response = self.gemini_model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    response_mime_type="application/json", # Native JSON mode
+                    temperature=0.1
+                )
+            )
+            response_text = response.text
+        else:
+            # Claude Call
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            response_text = message.content[0].text
+
         json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
         if json_match:
             response_text = json_match.group(1)
@@ -444,7 +468,7 @@ def main():
     print(f"Found {len(input_files)} files to process")
     
     try:
-        standardizer = RiskRegisterStandardizer()
+        standardizer = RiskRegisterStandardizer(use_gemini=True)
     except ValueError as e:
         print(f"Error initializing standardizer: {e}")
         return
